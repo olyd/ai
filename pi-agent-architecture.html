@@ -1,0 +1,825 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>pi agent 源码与架构导读</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/typescript.min.js"></script>
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({ startOnLoad: true, theme: 'neutral', securityLevel: 'loose' });
+</script>
+<style>
+  :root {
+    --fg: #1f2328;
+    --muted: #57606a;
+    --bg: #ffffff;
+    --bg-soft: #f6f8fa;
+    --border: #d0d7de;
+    --accent: #0969da;
+    --accent-soft: #ddf4ff;
+    --warn: #9a6700;
+    --warn-soft: #fff8c5;
+    --code-bg: #282c34;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); }
+  body {
+    font: 15px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { display: grid; grid-template-columns: 260px 1fr; max-width: 1200px; margin: 0 auto; }
+  nav.toc {
+    position: sticky; top: 0; align-self: start;
+    height: 100vh; overflow-y: auto;
+    border-right: 1px solid var(--border);
+    padding: 24px 18px;
+    background: var(--bg-soft);
+    font-size: 13.5px;
+  }
+  nav.toc h2 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; color: var(--muted); letter-spacing: .04em; }
+  nav.toc ol { list-style: none; margin: 0 0 16px; padding: 0; }
+  nav.toc ol li { margin: 4px 0; }
+  nav.toc a { color: var(--fg); text-decoration: none; display: block; padding: 4px 8px; border-radius: 6px; }
+  nav.toc a:hover { background: var(--accent-soft); color: var(--accent); }
+  nav.toc ol ol { margin-left: 12px; font-size: 12.5px; color: var(--muted); }
+  nav.toc ol ol a { color: var(--muted); }
+  main { padding: 32px 44px 80px; min-width: 0; }
+  h1 { font-size: 30px; margin: 0 0 8px; }
+  h2 { font-size: 23px; margin: 48px 0 14px; padding-bottom: 6px; border-bottom: 1px solid var(--border); scroll-margin-top: 12px; }
+  h3 { font-size: 18px; margin: 28px 0 10px; scroll-margin-top: 12px; }
+  h4 { font-size: 15px; margin: 18px 0 8px; color: var(--muted); }
+  p { margin: 10px 0; }
+  a { color: var(--accent); }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+  p code, li code { background: var(--bg-soft); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--border); }
+  pre { background: var(--code-bg); border-radius: 8px; padding: 14px 16px; overflow-x: auto; line-height: 1.5; margin: 14px 0; font-size: 12.5px; }
+  pre code { background: transparent; padding: 0; }
+  .codecap {
+    font-size: 12px; color: var(--muted); margin: -8px 4px 14px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  blockquote {
+    margin: 16px 0; padding: 10px 16px;
+    border-left: 4px solid var(--accent); background: var(--accent-soft);
+    color: var(--fg); border-radius: 0 6px 6px 0;
+  }
+  blockquote.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+  blockquote p:first-child { margin-top: 0; } blockquote p:last-child { margin-bottom: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 14px; }
+  th, td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--bg-soft); }
+  .mermaid { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 8px; padding: 18px; margin: 18px 0; text-align: center; }
+  .kbd { font-family: ui-monospace, Menlo, monospace; font-size: 12px; background: #eaeef2; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; padding: 1px 5px; }
+  .tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); border: 1px solid #b6e3ff; margin-left: 6px; vertical-align: middle; }
+  .hero { background: linear-gradient(135deg, #0969da10, #0969da05); border: 1px solid var(--border); border-radius: 12px; padding: 22px 26px; margin: 16px 0 28px; }
+  .hero p { margin: 6px 0; color: var(--muted); }
+  hr { border: none; border-top: 1px solid var(--border); margin: 36px 0; }
+  ul, ol { padding-left: 24px; }
+  ul li, ol li { margin: 4px 0; }
+  .small { font-size: 13px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="toc">
+  <h2>目录</h2>
+  <ol>
+    <li><a href="#intro">0. 这是什么项目</a></li>
+    <li><a href="#monorepo">1. monorepo 总览</a>
+      <ol>
+        <li><a href="#deps">包依赖关系</a></li>
+        <li><a href="#startup">启动链路</a></li>
+      </ol>
+    </li>
+    <li><a href="#ai">2. pi-ai：LLM 抽象层</a>
+      <ol>
+        <li><a href="#ai-events">事件流协议</a></li>
+        <li><a href="#ai-failure">失败封装契约</a></li>
+      </ol>
+    </li>
+    <li><a href="#agent-core">3. pi-agent-core：Agent 主循环</a>
+      <ol>
+        <li><a href="#loop">嵌套双循环</a></li>
+        <li><a href="#stream-resp">流式 → 完整消息</a></li>
+        <li><a href="#tool-exec">工具执行：序列 / 并行</a></li>
+        <li><a href="#hooks">Before/After 钩子</a></li>
+        <li><a href="#harness">AgentHarness 编排器</a></li>
+      </ol>
+    </li>
+    <li><a href="#session">4. 会话：树状结构与压缩</a>
+      <ol>
+        <li><a href="#session-tree">为何是树而非线性</a></li>
+        <li><a href="#build-ctx">buildSessionContext</a></li>
+        <li><a href="#compact">上下文 compaction</a></li>
+      </ol>
+    </li>
+    <li><a href="#tools">5. 工具系统</a>
+      <ol>
+        <li><a href="#tool-def">Definition vs Tool</a></li>
+        <li><a href="#mutqueue">文件写入串行化</a></li>
+        <li><a href="#bash">bash 工具</a></li>
+        <li><a href="#edit">edit 工具</a></li>
+      </ol>
+    </li>
+    <li><a href="#extensions">6. 扩展系统</a></li>
+    <li><a href="#syscall">7. 系统提示组装</a></li>
+    <li><a href="#summary">8. 整体总结 & 设计亮点</a></li>
+    <li><a href="#further">9. 推荐阅读路径</a></li>
+  </ol>
+</nav>
+
+<main>
+
+<header class="hero">
+  <h1>pi agent 源码与架构导读 <span class="tag">v0.75.4</span></h1>
+  <p>仓库：<a href="https://github.com/earendil-works/pi-mono" target="_blank">earendil-works/pi-mono</a> ｜ 作者：Mario Zechner</p>
+  <p>这份导读基于真实源码逐文件走读，目标是让读者在两小时内建立可以独立扩展 pi 的心智模型。</p>
+</header>
+
+<h2 id="intro">0. 这是什么项目</h2>
+
+<p>pi 是一个<strong>可自扩展的交互式编程 agent CLI</strong>，定位类似 Claude Code / Codex / aider。它把"agent 是什么"拆成了非常干净的三层：</p>
+
+<ul>
+  <li><code>@earendil-works/pi-ai</code> — 多 provider LLM 适配层（OpenAI/Anthropic/Google/Bedrock…），统一成一个流式事件协议。</li>
+  <li><code>@earendil-works/pi-agent-core</code> — 与 LLM 解耦的 agent 主循环：调模型、调工具、回灌结果、会话持久化、上下文压缩。</li>
+  <li><code>@earendil-works/pi-coding-agent</code> — 在 agent-core 之上塞进 7 个真实的编辑器工具（read / bash / edit / write / grep / find / ls），加上 TUI、扩展系统、斜杠命令。</li>
+</ul>
+
+<p>外加 <code>@earendil-works/pi-tui</code> 提供 differential rendering 的终端 UI 原语。整个 mono repo 用 Node ≥22、原生 TypeScript（<em>Node strip-only mode</em>）、TypeBox 做参数 schema。</p>
+
+<blockquote>
+读这份代码的最大启发是：<strong>"agent loop"本身其实很短（一个 while-while 双循环 + 一个流转换器），真正复杂的是会话状态、压缩、并发安全和扩展点。</strong>这也是 pi 的代码组织方式所强调的。
+</blockquote>
+
+<h2 id="monorepo">1. monorepo 总览</h2>
+
+<h3 id="deps">包依赖关系</h3>
+
+<div class="mermaid">
+flowchart LR
+  TUI[pi-tui<br/>终端原语]
+  AI[pi-ai<br/>provider 抽象 + 流]
+  CORE[pi-agent-core<br/>agent loop + session + compaction]
+  CA[pi-coding-agent<br/>CLI + 工具 + 扩展]
+  AI --> CORE
+  CORE --> CA
+  TUI --> CA
+  AI --> CA
+</div>
+
+<p>构建顺序在根 <code>package.json</code> 中写死：tui → ai → agent → coding-agent。这种线性依赖让每一层都能单独 unit test，也让 SDK 用户可以只依赖 <code>pi-agent-core</code> 嵌入到自己的应用里（如 Slack bot），不必拖进 TUI。</p>
+
+<h3 id="startup">启动链路</h3>
+
+<p><code>pi</code> 命令的入口是 <code>packages/coding-agent/dist/cli.js</code>（源在 <code>src/cli.ts</code>）。一条用户输入抵达 LLM 的路径如下：</p>
+
+<div class="mermaid">
+sequenceDiagram
+  participant U as 用户
+  participant CLI as cli.ts<br/>(args, mode)
+  participant RT as AgentSessionRuntime
+  participant AS as AgentSession
+  participant H as AgentHarness
+  participant L as agentLoop
+  participant AI as pi-ai.streamSimple
+  U->>CLI: pi "改下这个 bug"
+  CLI->>RT: createAgentSessionRuntime(cwd, agentDir)
+  RT->>AS: new AgentSession({ tools, model, session })
+  AS->>H: new AgentHarness(...)
+  U->>H: harness.prompt(text)
+  H->>L: runAgentLoop(messages, ctx, cfg)
+  L->>AI: streamSimple(model, ctx, opts)
+  AI-->>L: AssistantMessageEventStream
+  L->>L: 解析 toolCall → execute → 回灌
+  L-->>H: agent_end + 全部新消息
+  H-->>U: 写回 session.jsonl + 渲染
+</div>
+
+<p><code>AgentSessionRuntime</code>（<code>src/core/agent-session-runtime.ts</code>）的作用是 <em>"持有当前 session 及其 cwd-bound services，并支持原地替换"</em>—— 当用户 <span class="kbd">/new</span>、<span class="kbd">/resume</span> 或更换工作目录时，runtime 会先 teardown 旧 services 再创建新的，避免上一会话的 file mutation queue、扩展钩子泄漏到下一会话。</p>
+
+<h2 id="ai">2. pi-ai：LLM 抽象层</h2>
+
+<p><code>pi-ai</code> 的目标：把 10 多家 provider 的非标准协议封成<strong>一套 AsyncIterable 事件流</strong>，外层只需对 11 种事件做模式匹配。<code>packages/ai/src/providers/</code> 下每个 provider 是一个独立文件，全部走 <code>streamSimple</code> 这个统一入口。</p>
+
+<h3 id="ai-events">事件流协议</h3>
+
+<pre><code class="language-typescript">// packages/ai/src/types.ts:347
+export type AssistantMessageEvent =
+  | { type: "start"; partial: AssistantMessage }
+  | { type: "text_start";    contentIndex: number; partial: AssistantMessage }
+  | { type: "text_delta";    contentIndex: number; delta: string; partial: AssistantMessage }
+  | { type: "text_end";      contentIndex: number; content: string; partial: AssistantMessage }
+  | { type: "thinking_start"; contentIndex: number; partial: AssistantMessage }
+  | { type: "thinking_delta"; contentIndex: number; delta: string;  partial: AssistantMessage }
+  | { type: "thinking_end";   contentIndex: number; content: string; partial: AssistantMessage }
+  | { type: "toolcall_start"; contentIndex: number; partial: AssistantMessage }
+  | { type: "toolcall_delta"; contentIndex: number; delta: string;  partial: AssistantMessage }
+  | { type: "toolcall_end";   contentIndex: number; toolCall: ToolCall; partial: AssistantMessage }
+  | { type: "done";  reason: "stop" | "length" | "toolUse"; message: AssistantMessage }
+  | { type: "error"; reason: "aborted" | "error";          error:   AssistantMessage };
+</code></pre>
+<div class="codecap">packages/ai/src/types.ts:347-359</div>
+
+<p>注意三件事：</p>
+<ul>
+  <li><strong>每个 delta 事件都携带 <code>partial</code></strong>—— 完整快照。UI 直接渲染 <code>partial</code> 就是当前消息状态，不必自己 reduce。</li>
+  <li><strong><code>thinking</code>、<code>toolcall</code> 和 <code>text</code> 是平行内容块</strong>，靠 <code>contentIndex</code> 区分；这样能同时支持 Claude 的 thinking 块、OpenAI 的 reasoning 字段、并行 tool calls。</li>
+  <li><strong>stream 永远以 <code>done</code> 或 <code>error</code> 结尾</strong>—— 这是下面那个"不抛异常"契约的基础。</li>
+</ul>
+
+<h3 id="ai-failure">失败封装契约</h3>
+
+<pre><code class="language-typescript">// packages/agent/src/types.ts:24
+/**
+ * Stream function used by the agent loop.
+ *
+ * Contract:
+ * - Must not throw or return a rejected promise for request/model/runtime failures.
+ * - Must return an AssistantMessageEventStream.
+ * - Failures must be encoded in the returned stream via protocol events and a
+ *   final AssistantMessage with stopReason "error" or "aborted" and errorMessage.
+ */
+export type StreamFn = (
+  ...args: Parameters&lt;typeof streamSimple&gt;
+) =&gt; ReturnType&lt;typeof streamSimple&gt; | Promise&lt;ReturnType&lt;typeof streamSimple&gt;&gt;;
+</code></pre>
+<div class="codecap">packages/agent/src/types.ts:24-34</div>
+
+<blockquote>
+这条契约非常关键：<strong>provider 失败必须通过事件流报告，而不是 throw</strong>。这样 agent loop 不用区分"请求失败"和"模型说我做完了"两种代码路径，只需要一个 for-await。整个错误恢复、UI 渲染、abort 处理都因此变得线性可读。
+</blockquote>
+
+<h2 id="agent-core">3. pi-agent-core：Agent 主循环</h2>
+
+<p>这一节的全部肉都在 <code>packages/agent/src/agent-loop.ts</code>（~740 行）。它做四件事：</p>
+<ol>
+  <li>把 <code>AgentMessage[]</code>（含自定义消息）压平成 LLM 能吃的 <code>Message[]</code>；</li>
+  <li>调 provider，把流事件转成 <code>AgentEvent</code> 转发；</li>
+  <li>从 assistant 消息里抠出 toolCalls，调用工具，构造 <code>ToolResultMessage</code> 回灌；</li>
+  <li>处理 steering / followUp 队列，让用户能"中途插话"或"agent 停了再追问"。</li>
+</ol>
+
+<h3 id="loop">嵌套双循环</h3>
+
+<div class="mermaid">
+stateDiagram-v2
+  [*] --> Outer
+  Outer: 外循环（处理 follow-up 队列）
+  state Outer {
+    [*] --> Inner
+    Inner: 内循环
+    state Inner {
+      [*] --> InjectSteer: drain steering queue
+      InjectSteer --> StreamAssistant
+      StreamAssistant --> CheckTools
+      CheckTools --> ExecuteTools: 有 tool call
+      ExecuteTools --> CheckStop
+      CheckTools --> CheckStop: 无 tool call
+      CheckStop --> InjectSteer: 继续
+      CheckStop --> [*]: shouldStopAfterTurn
+    }
+    Inner --> PollFollowUp
+    PollFollowUp --> Inner: 有 follow-up
+    PollFollowUp --> [*]: 队列空
+  }
+</div>
+
+<pre><code class="language-typescript">// packages/agent/src/agent-loop.ts:170 (简化)
+while (true) {                       // 外循环：等 follow-up
+  let hasMoreToolCalls = true;
+  while (hasMoreToolCalls || pendingMessages.length &gt; 0) {  // 内循环：一个会话回合
+    if (!firstTurn) await emit({ type: "turn_start" });
+    // 1. 注入 steering message（用户在 agent 跑时打字）
+    for (const m of pendingMessages) currentContext.messages.push(m);
+    // 2. 调 LLM，等流结束拿到完整 AssistantMessage
+    const message = await streamAssistantResponse(currentContext, config, signal, emit, streamFn);
+    if (message.stopReason === "error" || message.stopReason === "aborted") {
+      await emit({ type: "agent_end", messages: newMessages }); return;
+    }
+    // 3. 取 toolCalls 执行（顺序或并行）
+    const toolCalls = message.content.filter(c =&gt; c.type === "toolCall");
+    if (toolCalls.length) {
+      const batch = await executeToolCalls(currentContext, message, config, signal, emit);
+      hasMoreToolCalls = !batch.terminate;
+      for (const r of batch.messages) currentContext.messages.push(r);
+    } else hasMoreToolCalls = false;
+    // 4. 给宿主一个换模型 / 重建 context 的机会
+    const snap = await config.prepareNextTurn?.({ message, ... });
+    if (snap) { currentContext = snap.context ?? currentContext; ... }
+    if (await config.shouldStopAfterTurn?.({...})) { await emit({ type: "agent_end", ... }); return; }
+    pendingMessages = (await config.getSteeringMessages?.()) || [];
+  }
+  // 内循环结束：看用户有没有"等 agent 停了再说"的消息
+  const followUps = (await config.getFollowUpMessages?.()) || [];
+  if (followUps.length) { pendingMessages = followUps; continue; }
+  break;
+}
+</code></pre>
+<div class="codecap">packages/agent/src/agent-loop.ts:170-266 (节选 + 中文注释)</div>
+
+<p>三类队列的语义在 <code>AgentHarness</code> 里暴露成三个 API：</p>
+
+<table>
+<thead><tr><th>API</th><th>注入时机</th><th>用途</th></tr></thead>
+<tbody>
+<tr><td><code>steer(text)</code></td><td>当前 turn 跑完，下一次 LLM 调用之前</td><td>用户想纠偏正在做的事</td></tr>
+<tr><td><code>followUp(text)</code></td><td>agent 本来要停了的瞬间</td><td>"再帮我把 README 更新一下"</td></tr>
+<tr><td><code>nextTurn(text)</code></td><td>下次 <code>prompt()</code> 调用，与用户输入合并</td><td>排队多个不相关问题</td></tr>
+</tbody>
+</table>
+
+<h3 id="stream-resp">流式 → 完整消息</h3>
+
+<pre><code class="language-typescript">// packages/agent/src/agent-loop.ts:275
+async function streamAssistantResponse(context, config, signal, emit, streamFn) {
+  let messages = context.messages;
+  if (config.transformContext) messages = await config.transformContext(messages, signal);
+  const llmMessages = await config.convertToLlm(messages);     // AgentMessage → LLM Message
+  const llmContext = { systemPrompt: context.systemPrompt, messages: llmMessages, tools: context.tools };
+  const response = await (streamFn || streamSimple)(config.model, llmContext, { ...config, signal });
+
+  let partialMessage: AssistantMessage | null = null;
+  for await (const event of response) {
+    switch (event.type) {
+      case "start":
+        partialMessage = event.partial;
+        context.messages.push(partialMessage); // 先把"骨架"塞进 context
+        await emit({ type: "message_start", message: { ...partialMessage } });
+        break;
+      case "text_delta": case "thinking_delta": case "toolcall_delta":
+      case "text_start": case "text_end": /* ...等等 */
+        partialMessage = event.partial;
+        context.messages[context.messages.length - 1] = partialMessage; // 原地替换
+        await emit({ type: "message_update", assistantMessageEvent: event, message: { ...partialMessage } });
+        break;
+      case "done": case "error": {
+        const finalMessage = await response.result();
+        context.messages[context.messages.length - 1] = finalMessage;
+        await emit({ type: "message_end", message: finalMessage });
+        return finalMessage;
+      }
+    }
+  }
+}
+</code></pre>
+<div class="codecap">packages/agent/src/agent-loop.ts:275-368</div>
+
+<blockquote>
+注意 <code>convertToLlm</code> 这个回调：<strong>agent-core 不强制规定消息长什么样</strong>，只要 host 实现一个"我的自定义消息怎么折成标准 LLM 消息"的函数。<code>pi-coding-agent</code> 用这个能力加了 <code>custom_message</code>、<code>branch_summary</code>、<code>compaction_summary</code> 等只在 UI/会话里显示但要喂给模型的伪消息。
+</blockquote>
+
+<h3 id="tool-exec">工具执行：序列 / 并行 / 早停</h3>
+
+<pre><code class="language-typescript">// packages/agent/src/agent-loop.ts:373
+async function executeToolCalls(currentContext, assistantMessage, config, signal, emit) {
+  const toolCalls = assistantMessage.content.filter(c =&gt; c.type === "toolCall");
+  // 任何一个工具声明自己是 sequential，整批就退化成 sequential
+  const hasSeq = toolCalls.some(tc =&gt;
+    currentContext.tools?.find(t =&gt; t.name === tc.name)?.executionMode === "sequential");
+  if (config.toolExecution === "sequential" || hasSeq) {
+    return executeToolCallsSequential(currentContext, assistantMessage, toolCalls, config, signal, emit);
+  }
+  return executeToolCallsParallel(currentContext, assistantMessage, toolCalls, config, signal, emit);
+}
+
+function shouldTerminateToolBatch(finalized) {
+  // 只有"全部"工具都说 terminate:true 才早停，避免一个工具把整轮拉死
+  return finalized.length &gt; 0 && finalized.every(f =&gt; f.result.terminate === true);
+}
+</code></pre>
+<div class="codecap">packages/agent/src/agent-loop.ts:373-388, 544-546</div>
+
+<p>并行执行的实现也很干净：先<strong>顺序</strong>地做 <code>prepareToolCall</code>（参数验证、beforeToolCall 钩子），把每个准备好的 call 包成 lambda，最后 <code>Promise.all</code> 一起跑。tool-result 消息的顺序仍然按 assistant 源顺序追加 —— 这一点很重要，否则 LLM 在下一轮会被乱序的 toolResult 弄崩。</p>
+
+<h3 id="hooks">Before/After 钩子（沙箱化的入口）</h3>
+
+<pre><code class="language-typescript">// packages/agent/src/agent-loop.ts:562
+async function prepareToolCall(currentContext, assistantMessage, toolCall, config, signal) {
+  const tool = currentContext.tools?.find(t =&gt; t.name === toolCall.name);
+  if (!tool) return { kind: "immediate", result: createErrorToolResult(`Tool ${toolCall.name} not found`), isError: true };
+  try {
+    const prepared = prepareToolCallArguments(tool, toolCall);
+    const validatedArgs = validateToolArguments(tool, prepared);   // TypeBox schema validation
+    if (config.beforeToolCall) {
+      const before = await config.beforeToolCall({ assistantMessage, toolCall, args: validatedArgs, context: currentContext }, signal);
+      if (before?.block) return { kind: "immediate", result: createErrorToolResult(before.reason || "..."), isError: true };
+    }
+    return { kind: "prepared", toolCall, tool, args: validatedArgs };
+  } catch (error) {
+    return { kind: "immediate", result: createErrorToolResult(String(error)), isError: true };
+  }
+}
+</code></pre>
+<div class="codecap">packages/agent/src/agent-loop.ts:562-626</div>
+
+<p><code>beforeToolCall</code> 返回 <code>{ block: true, reason }</code> 就能阻止任何工具执行；<code>afterToolCall</code> 可以重写 <code>content / details / isError / terminate</code>。<strong>这两个钩子加上 <code>transformContext</code> 是 sandbox 扩展和审计扩展的全部支撑面</strong>—— 比如 Anthropic sandbox extension（在 examples/extensions/sandbox 里）就是用 beforeToolCall 把 bash 调用劫持进 firejail。</p>
+
+<h3 id="harness">AgentHarness：业务编排器</h3>
+
+<p><code>agent-loop.ts</code> 是无状态函数。真正"长期持有 session、抗中断、能改模型、能 abort"的是 <code>AgentHarness</code>（<code>packages/agent/src/harness/agent-harness.ts</code>，~1000 行）：</p>
+
+<pre><code class="language-typescript">// packages/agent/src/harness/agent-harness.ts:526
+private async executeTurn(turnState, text, options?) {
+  let activeTurnState = turnState;
+  let messages: AgentMessage[] = [createUserMessage(text, options?.images)];
+  // nextTurn 队列里囤的消息和当前 prompt 一起喂
+  if (this.nextTurnQueue.length &gt; 0) {
+    messages = [...this.nextTurnQueue.splice(0), messages[0]!];
+    await this.emitQueueUpdate();
+  }
+  const beforeResult = await this.emitHook({ type: "before_agent_start", prompt: text, ... });
+  if (beforeResult?.messages) messages = [...messages, ...beforeResult.messages];
+
+  const abortController = new AbortController();
+  this.runAbortController = abortController;
+  const runResult = (async () =&gt; {
+    try {
+      return await runAgentLoop(messages, this.createContext(turnState, ...),
+        this.createLoopConfig(getTurnState, setTurnState),
+        (event) =&gt; this.handleAgentEvent(event, abortController.signal),
+        abortController.signal,
+        this.createStreamFn(getTurnState));
+    } catch (error) {
+      return await this.emitRunFailure(activeTurnState.model, error, abortController.signal.aborted, abortController.signal);
+    }
+  })();
+  // ...拿到 newMessages 后倒序找出最后一条 assistant 返回
+}
+</code></pre>
+<div class="codecap">packages/agent/src/harness/agent-harness.ts:526-601</div>
+
+<p>几个值得抄走的设计：</p>
+<ul>
+  <li><strong><code>createStreamFn</code> 闭包绑定 turnState</strong>。每次 LLM 调用之前，harness 都重新解析一次 <code>getApiKeyAndHeaders(model)</code>，专门为 GitHub Copilot 这种"OAuth token 在长 tool 执行期间会过期"的场景做的。</li>
+  <li><strong>所有 session 写入都先入 <code>pendingSessionWrites</code> 队列</strong>，在 <code>turn_end</code> 时统一 flush。这样 abort 发生时不会写半截的 message。</li>
+  <li><strong><code>emitHook</code> 是有返回值的事件</strong>：扩展可以在 <code>context</code> hook 里替换整段消息历史、在 <code>tool_call</code> hook 里 block、在 <code>session_before_compact</code> 里取消或者自己实现 compaction —— 全部统一在 <code>handlers</code> Map 上。</li>
+</ul>
+
+<h2 id="session">4. 会话：树状结构与压缩</h2>
+
+<h3 id="session-tree">为何是树而非线性</h3>
+
+<p>很多 agent 把会话存成 <code>messages: AgentMessage[]</code>。pi 不是 —— 它把每条事件叫做一个 <code>SessionTreeEntry</code>，每个 entry 都带 <code>parentId</code>，构成一棵树：</p>
+
+<div class="mermaid">
+graph TD
+  root[session_info]
+  m1[user: 帮我修 bug]
+  a1[assistant: 看了一下，应该改 foo.ts]
+  t1[toolResult: edit foo.ts ok]
+  a2[assistant: 改好了，跑测试]
+  m2[user 重写: 不对，先看 bar.ts]
+  a3[assistant: 看了 bar.ts]
+  cs[compaction summary]
+  m3[user: 接着上面的来]
+  root --> m1 --> a1 --> t1 --> a2
+  a1 --> m2 --> a3
+  a3 --> cs --> m3
+  classDef sum fill:#fff8c5,stroke:#9a6700
+  class cs sum
+</div>
+
+<p>类型一共九种（<code>SessionTreeEntry</code>）：<code>message</code> / <code>custom_message</code> / <code>thinking_level_change</code> / <code>model_change</code> / <code>compaction</code> / <code>branch_summary</code> / <code>label</code> / <code>session_info</code> / <code>tool_use</code>。每个 entry 由 jsonl-storage 追加写入磁盘（一行一个 entry），所以会话文件天然支持 <code>tail -f</code> 调试。</p>
+
+<p>"当前位置"由 <code>leafId</code> 标记。<span class="kbd">/fork</span> 从某条 user 消息分出新枝、<span class="kbd">/clone</span> 复制当前位置、<span class="kbd">/tree</span> 在分支间跳转，这些操作只需要改 <code>leafId</code>，原有 entry 一行都不动 —— git 式的状态管理。</p>
+
+<h3 id="build-ctx">buildSessionContext</h3>
+
+<pre><code class="language-typescript">// packages/agent/src/harness/session/session.ts:21
+export function buildSessionContext(pathEntries: SessionTreeEntry[]): SessionContext {
+  let thinkingLevel = "off";
+  let model: { provider: string; modelId: string } | null = null;
+  let compaction: CompactionEntry | null = null;
+  // 第一遍：从 root → leaf 扫一遍，记下最后一次模型/思考切换、最后一个 compaction 边界
+  for (const entry of pathEntries) {
+    if (entry.type === "thinking_level_change") thinkingLevel = entry.thinkingLevel;
+    else if (entry.type === "model_change")     model = { provider: entry.provider, modelId: entry.modelId };
+    else if (entry.type === "message" && entry.message.role === "assistant")
+      model = { provider: entry.message.provider, modelId: entry.message.model };
+    else if (entry.type === "compaction")       compaction = entry;
+  }
+  // 第二遍：从最后一个 compaction 边界之后挑出真正要喂给 LLM 的消息
+  if (compaction) {
+    messages.push(createCompactionSummaryMessage(compaction.summary, compaction.tokensBefore, compaction.timestamp));
+    /* 把 firstKeptEntryId 之后的 entries 加进去 */
+  }
+  return { messages, thinkingLevel, model };
+}
+</code></pre>
+<div class="codecap">packages/agent/src/harness/session/session.ts:21-76</div>
+
+<blockquote>
+这是 pi 把"会话树"翻译回"线性 LLM context"的关键。<strong>compaction 不会真删掉历史 entries</strong>，只是写一个 compaction entry 把它们"挡在外面"，浏览树时仍能完整看到原貌。这是相当多 agent 系统会踩的坑（删了就找不回来），pi 用 append-only + 边界标记解决了。
+</blockquote>
+
+<h3 id="compact">上下文 compaction</h3>
+
+<p>默认设置：<code>reserveTokens: 16k</code>（留给 summary prompt 和输出）、<code>keepRecentTokens: 20k</code>（保留最近多少 token）。逻辑在 <code>packages/agent/src/harness/compaction/compaction.ts</code>，三步：</p>
+
+<ol>
+  <li><code>prepareCompaction</code>：在 branch 上从后往前数 token，找到要"砍掉"的分界点 <code>firstKeptEntryId</code>。</li>
+  <li><code>compact</code>：把砍掉那段对话序列化（含工具调用细节），用同模型 + custom instructions 跑一次 <code>completeSimple</code>，要求输出一个 summary。</li>
+  <li>追加一个 <code>CompactionEntry</code>（含 summary 文本、firstKeptEntryId、tokensBefore、读过/改过的文件列表）。</li>
+</ol>
+
+<p>用户在 <span class="kbd">/compact</span> 时如果给了 customInstructions，AgentHarness 还会先触发 <code>session_before_compact</code> hook，扩展甚至能整段接管自己实现压缩。文件列表 <code>{ readFiles, modifiedFiles }</code> 之所以单独存，是为了让下次 compaction 链式继承——避免反复压缩后丢失"这个 session 改过哪些文件"的元信息。</p>
+
+<h2 id="tools">5. 工具系统</h2>
+
+<h3 id="tool-def">Definition vs Tool：两层抽象</h3>
+
+<p>同一个工具在 pi 里有两种形态：</p>
+
+<table>
+<thead><tr><th></th><th><code>AgentTool</code></th><th><code>ToolDefinition</code></th></tr></thead>
+<tbody>
+<tr><td>定义在</td><td>pi-agent-core</td><td>pi-coding-agent extensions/types.ts</td></tr>
+<tr><td>关心</td><td>schema + execute()</td><td>+ label, prompt snippet, UI renderer, autocomplete</td></tr>
+<tr><td>用途</td><td>agent loop 直接调</td><td>CLI 注册、扩展系统、UI 渲染</td></tr>
+</tbody>
+</table>
+
+<pre><code class="language-typescript">// packages/coding-agent/src/core/tools/tool-definition-wrapper.ts:5
+export function wrapToolDefinition&lt;TDetails = unknown&gt;(
+  definition: ToolDefinition&lt;any, TDetails&gt;,
+  ctxFactory?: () =&gt; ExtensionContext,
+): AgentTool&lt;any, TDetails&gt; {
+  return {
+    name: definition.name,
+    label: definition.label,
+    description: definition.description,
+    parameters: definition.parameters,
+    prepareArguments: definition.prepareArguments,
+    executionMode: definition.executionMode,
+    execute: (toolCallId, params, signal, onUpdate) =&gt;
+      definition.execute(toolCallId, params, signal, onUpdate, ctxFactory?.() as ExtensionContext),
+  };
+}
+</code></pre>
+<div class="codecap">packages/coding-agent/src/core/tools/tool-definition-wrapper.ts:5-19</div>
+
+<p>这个薄包装做的事很简单：剥掉 UI 字段、把 <code>ExtensionContext</code> 延迟构造注入到 <code>execute</code>。结果是 agent-core 看到的工具签名永远干净，UI 层和扩展层想加多少元数据都行。</p>
+
+<h3 id="mutqueue">文件写入串行化（同文件并行的陷阱）</h3>
+
+<pre><code class="language-typescript">// packages/coding-agent/src/core/tools/file-mutation-queue.ts
+const fileMutationQueues = new Map&lt;string, Promise&lt;void&gt;&gt;();
+
+function getMutationQueueKey(filePath: string): string {
+  const resolvedPath = resolve(filePath);
+  try { return realpathSync.native(resolvedPath); } catch { return resolvedPath; }
+}
+
+export async function withFileMutationQueue&lt;T&gt;(filePath: string, fn: () =&gt; Promise&lt;T&gt;): Promise&lt;T&gt; {
+  const key = getMutationQueueKey(filePath);
+  const currentQueue = fileMutationQueues.get(key) ?? Promise.resolve();
+  let releaseNext!: () =&gt; void;
+  const nextQueue = new Promise&lt;void&gt;((r) =&gt; { releaseNext = r; });
+  const chainedQueue = currentQueue.then(() =&gt; nextQueue);
+  fileMutationQueues.set(key, chainedQueue);
+  await currentQueue;
+  try { return await fn(); }
+  finally {
+    releaseNext();
+    if (fileMutationQueues.get(key) === chainedQueue) fileMutationQueues.delete(key);
+  }
+}
+</code></pre>
+<div class="codecap">packages/coding-agent/src/core/tools/file-mutation-queue.ts:1-39</div>
+
+<blockquote class="warn">
+<strong>为什么要写这个？</strong>—— 因为 agent loop 默认 <code>parallel</code> 执行工具。如果模型在一轮里发了两个 edit 都改 <code>foo.ts</code>，并行的 read-modify-write 会丢更新。<code>withFileMutationQueue</code> 用 <em>realpath</em>（解析符号链接）作为 key 把同一物理文件的 mutation 排成单链，不同文件还能并行 —— 是非常实用的并发原语。
+</blockquote>
+
+<h3 id="bash">bash 工具：streaming + abort + 进程树清理</h3>
+
+<pre><code class="language-typescript">// packages/coding-agent/src/core/tools/bash.ts:65 (节选)
+export function createLocalBashOperations(options?: { shellPath?: string }): BashOperations {
+  return {
+    exec: (command, cwd, { onData, signal, timeout, env }) =&gt; new Promise((resolve, reject) =&gt; {
+      const { shell, args } = getShellConfig(options?.shellPath);
+      const child = spawn(shell, [...args, command], {
+        cwd, detached: process.platform !== "win32",
+        env: env ?? getShellEnv(),
+        stdio: ["ignore", "pipe", "pipe"], windowsHide: true,
+      });
+      if (child.pid) trackDetachedChildPid(child.pid);
+      let timedOut = false;
+      const timeoutHandle = timeout ? setTimeout(() =&gt; {
+        timedOut = true; if (child.pid) killProcessTree(child.pid);
+      }, timeout * 1000) : undefined;
+      child.stdout?.on("data", onData);
+      child.stderr?.on("data", onData);
+      const onAbort = () =&gt; { if (child.pid) killProcessTree(child.pid); };
+      if (signal) signal.aborted ? onAbort() : signal.addEventListener("abort", onAbort, { once: true });
+      // waitForChildProcess 是 pi 自己写的：避免 detached 子进程持有的 stdio 让父进程 hang
+      waitForChildProcess(child).then((code) =&gt; { /* 清理 + resolve */ });
+    }),
+  };
+}
+</code></pre>
+<div class="codecap">packages/coding-agent/src/core/tools/bash.ts:65-130</div>
+
+<p>三处细节：</p>
+<ul>
+  <li><code>detached: true</code> + <code>killProcessTree(pid)</code> —— 不只杀 shell，还杀 shell fork 出来的 npm/python/...，否则 <span class="kbd">Esc</span> 中断后还在跑。</li>
+  <li><code>onData</code> 流式回调，让 UI 能边跑边显示输出。<code>OutputAccumulator</code>（同目录）负责按 <code>DEFAULT_MAX_BYTES</code> / <code>DEFAULT_MAX_LINES</code> 截断 + 落盘 <code>fullOutputPath</code>，避免 LLM 上下文被 <code>npm install</code> 撑爆。</li>
+  <li>把 <code>BashOperations</code> 抽出来做接口 —— SSH 扩展、Docker 扩展、远端沙箱都能替换它而不动 bash 工具本身。</li>
+</ul>
+
+<h3 id="edit">edit 工具：原文匹配的多点替换</h3>
+
+<pre><code class="language-typescript">// packages/coding-agent/src/core/tools/edit.ts:30
+const replaceEditSchema = Type.Object({
+  oldText: Type.String({
+    description:
+      "Exact text for one targeted replacement. It must be unique in the original file and must not overlap with any other edits[].oldText in the same call.",
+  }),
+  newText: Type.String({ description: "Replacement text for this targeted edit." }),
+}, { additionalProperties: false });
+
+const editSchema = Type.Object({
+  path: Type.String({ description: "Path to the file to edit (relative or absolute)" }),
+  edits: Type.Array(replaceEditSchema, {
+    description:
+      "One or more targeted replacements. Each edit is matched against the original file, not incrementally. " +
+      "Do not include overlapping or nested edits. If two changes touch the same block or nearby lines, merge them into one edit instead.",
+  }),
+}, { additionalProperties: false });
+</code></pre>
+<div class="codecap">packages/coding-agent/src/core/tools/edit.ts:30-50</div>
+
+<p>语义是<strong>"全部 edits 都针对原文匹配（不是顺序应用）"</strong>。这种语义和 Claude Code 的 edit 工具一致，比"逐条应用 + 二次匹配"更不容易出错 —— 模型不必预测前一条 edit 后的内容。schema 描述里直接写明这个规则，几乎所有先进模型都能正确遵守。</p>
+
+<p><code>prepareEditArguments</code> 还做了一件实战派的事：兼容 Opus 4.6 / GLM-5.1 等模型偶尔把 <code>edits</code> 字段塞成 <strong>JSON 字符串</strong>而非数组的情况，自动 <code>JSON.parse</code>。这种"防御性 schema 适配"散落在多个工具里。</p>
+
+<h2 id="extensions">6. 扩展系统</h2>
+
+<p>扩展位于 <code>packages/coding-agent/src/core/extensions/</code>，由 <code>loader.ts</code>（用 <code>jiti</code> 即时编译 TS）、<code>runner.ts</code>（生命周期）、<code>types.ts</code>（API 表面）三部分组成。打包成 Bun 单二进制时，<strong>所有 pi 包都通过 <code>virtualModules</code> 注入</strong>：</p>
+
+<pre><code class="language-typescript">// packages/coding-agent/src/core/extensions/loader.ts:43
+const VIRTUAL_MODULES: Record&lt;string, unknown&gt; = {
+  typebox: _bundledTypebox,
+  "typebox/compile": _bundledTypeboxCompile,
+  "typebox/value": _bundledTypeboxValue,
+  "@earendil-works/pi-agent-core": _bundledPiAgentCore,
+  "@earendil-works/pi-tui": _bundledPiTui,
+  "@earendil-works/pi-ai": _bundledPiAi,
+  "@earendil-works/pi-ai/oauth": _bundledPiAiOauth,
+  "@earendil-works/pi-coding-agent": _bundledPiCodingAgent,
+  // 旧 scope 兼容
+  "@mariozechner/pi-agent-core": _bundledPiAgentCore,
+  // ...
+};
+</code></pre>
+<div class="codecap">packages/coding-agent/src/core/extensions/loader.ts:43-62</div>
+
+<p>这解决了一个具体的痛点：用户写的 TS 扩展 <code>import { Type } from "typebox"</code>，但 <code>node_modules</code> 在编译后的单二进制里根本不存在。jiti 在解析这些 import 时会被截胡，直接拿宿主进程里已经存在的模块实例 —— 避免了双实例（两份 TypeBox）导致 <code>instanceof</code> 失败的常见坑。</p>
+
+<p>扩展能 hook 的事件覆盖了 agent 全部生命周期：</p>
+
+<ul>
+  <li>注册工具：<code>registerTool(definition)</code> → 自动 wrap 成 AgentTool</li>
+  <li>注册斜杠命令：<code>registerCommand({ name, handler })</code></li>
+  <li>注册 provider：<code>registerProvider(...)</code> —— 第三方厂商支持的接入点</li>
+  <li>hook 事件：<code>before_agent_start</code> / <code>context</code> / <code>tool_call</code> / <code>tool_result</code> / <code>session_before_compact</code> / <code>session_before_tree</code> / <code>before_provider_request</code> / <code>before_provider_payload</code> / <code>after_provider_response</code></li>
+  <li>UI：调用 <code>tui.overlay()</code> 弹窗、注册 widget、自定义渲染器</li>
+</ul>
+
+<p>仓库自带 4 个示例：<code>sandbox</code>（Anthropic firejail）、<code>custom-provider-anthropic</code>（自实现 provider）、<code>custom-provider-gitlab-duo</code>、<code>with-deps</code>（带外部依赖的扩展）。</p>
+
+<h2 id="syscall">7. 系统提示组装</h2>
+
+<pre><code class="language-typescript">// packages/coding-agent/src/core/system-prompt.ts:132
+let prompt = `You are an expert coding assistant operating inside pi, a coding agent harness. ...
+
+Available tools:
+${toolsList}
+
+In addition to the tools above, you may have access to other custom tools depending on the project.
+
+Guidelines:
+${guidelines}
+
+Pi documentation (read only when the user asks about pi itself, ...):
+- Main documentation: ${readmePath}
+- Additional docs: ${docsPath}
+- Examples: ${examplesPath} (extensions, custom tools, SDK)
+...`;
+if (appendSection) prompt += appendSection;
+if (contextFiles.length &gt; 0) {
+  prompt += "\n\n&lt;project_context&gt;\n\n";
+  for (const { path, content } of contextFiles)
+    prompt += `&lt;project_instructions path="${path}"&gt;\n${content}\n&lt;/project_instructions&gt;\n\n`;
+  prompt += "&lt;/project_context&gt;\n";
+}
+if (hasRead && skills.length &gt; 0) prompt += formatSkillsForPrompt(skills);
+prompt += `\nCurrent date: ${date}\nCurrent working directory: ${promptCwd}`;
+return prompt;
+</code></pre>
+<div class="codecap">packages/coding-agent/src/core/system-prompt.ts:132-175</div>
+
+<p>三点值得抄：</p>
+<ul>
+  <li><strong>guidelines 根据 selectedTools 动态生成</strong>：没有 <code>grep/find/ls</code> 时让用 <code>bash</code> 做 ls/rg；都有时反过来推荐使用专用工具（"更快、尊重 .gitignore"）。</li>
+  <li><strong>项目级 AGENTS.md / CLAUDE.md / .pi/ 下的指令</strong> 通过 <code>contextFiles</code> 包在 <code>&lt;project_instructions&gt;</code> XML 标签里，让模型可识别归属。</li>
+  <li><strong>skill 只在有 read 工具时才注入</strong>—— 因为 skill 只是个"路径 + 描述"，模型按需自己 <code>read</code>。这种"懒加载 prompt"避免了往 system prompt 里塞一堆永远用不上的指令。</li>
+</ul>
+
+<h2 id="summary">8. 整体总结与设计亮点</h2>
+
+<div class="mermaid">
+flowchart TB
+  subgraph TUI[pi-tui]
+    T[differential renderer]
+  end
+  subgraph AI[pi-ai]
+    SS[streamSimple]
+    PR[providers/*]
+    EV[AssistantMessageEventStream]
+    SS --> EV
+    PR --> SS
+  end
+  subgraph CORE[pi-agent-core]
+    AL[agent-loop.ts]
+    H[AgentHarness]
+    SES[Session<br/>tree + jsonl]
+    COMP[compaction]
+    H --> AL
+    H --> SES
+    SES --> COMP
+    AL --> EV
+  end
+  subgraph CA[pi-coding-agent]
+    AS[AgentSession]
+    RT[AgentSessionRuntime]
+    TOOLS[7 个内置工具]
+    EXT[extensions loader]
+    SP[system-prompt builder]
+    RT --> AS
+    AS --> H
+    AS --> TOOLS
+    AS --> EXT
+    AS --> SP
+  end
+  CA --> TUI
+</div>
+
+<h3>4 个关键抽象</h3>
+<ol>
+  <li><strong><code>AssistantMessageEventStream</code></strong>：用一个 11 种事件的统一协议把所有 provider 拍平。失败也是事件，所以上层一个 for-await 全搞定。</li>
+  <li><strong>"convertToLlm" 回调</strong>：让 host 自定义消息类型，agent-core 只在 LLM 调用边界做一次翻译，UI 和 session 可以承载任意伪消息。</li>
+  <li><strong>Session 是 append-only 树</strong>：分支、克隆、压缩都不破坏历史；<code>buildSessionContext</code> 把树投影回线性 context。</li>
+  <li><strong>Definition / Tool 双层 + Operations 接口</strong>：工具元数据归 definition，实际执行通过 <code>BashOperations</code>/<code>EditOperations</code> 注入，给 SSH/sandbox/Docker 留口子。</li>
+</ol>
+
+<h3>区别于其他 coding agent 的设计选择</h3>
+<ul>
+  <li><strong>三队列 steering / followUp / nextTurn</strong>：把"用户什么时候能插话"这件事建模成了 3 种语义不同的队列，比单一阻塞输入更像 IDE。</li>
+  <li><strong>失败不抛异常的 stream 契约</strong>：少见但优雅，让错误处理代码量大幅缩减。</li>
+  <li><strong>file mutation queue 用 realpath 做 key</strong>：解决并行 edit 的 race condition，且能跨符号链接正确合并。</li>
+  <li><strong>compaction 是 entry 而非删除</strong>：保留可回溯性，并把"已读/已改文件列表"链式传递。</li>
+  <li><strong>扩展通过 jiti + virtualModules 加载</strong>：让用户脚本能直接 <code>import { Type } from "typebox"</code> 而不需要任何 build，同时在编译后单二进制里也成立。</li>
+  <li><strong>无 agent 子任务 / 子 agent 概念</strong>：pi 只有一个 agent loop。需要"分支"时用 session tree + branch summary 代替，比 sub-agent 简单很多。</li>
+</ul>
+
+<h2 id="further">9. 推荐阅读路径</h2>
+
+<p>如果时间有限，按这个顺序读 6 个文件足够建立全图：</p>
+
+<ol>
+  <li><code>packages/agent/src/types.ts</code>（419 行）—— 把所有数据模型看一遍，后面读什么都不晕。</li>
+  <li><code>packages/agent/src/agent-loop.ts</code>（743 行）—— 整个 agent 的"心脏"，从 <code>runLoop</code> 入。</li>
+  <li><code>packages/agent/src/harness/agent-harness.ts</code>（995 行）—— 看 host 怎么用 loop，重点 <code>executeTurn</code> / <code>createLoopConfig</code>。</li>
+  <li><code>packages/agent/src/harness/session/session.ts</code> + <code>compaction/compaction.ts</code> —— 会话与压缩。</li>
+  <li><code>packages/coding-agent/src/core/tools/edit.ts</code> + <code>bash.ts</code> —— 两个最复杂的工具，足够模仿写一个自己的。</li>
+  <li><code>packages/coding-agent/src/core/extensions/types.ts</code> —— 看完就知道扩展能改哪些事。</li>
+</ol>
+
+<p class="small">导读基于 pi 仓库 commit at 2026-05-21 的 0.75.4 版本；文件行号若有偏移以最新源码为准。</p>
+
+<hr>
+<p class="small">Sources: 全部代码引用来自本地 <code>/Users/olyd/dev/pi</code>（github.com/earendil-works/pi-mono）。</p>
+
+</main>
+</div>
+
+<script>
+  // 高亮所有代码块
+  document.querySelectorAll('pre code').forEach(b => hljs.highlightElement(b));
+  // 平滑滚动
+  document.querySelectorAll('nav.toc a[href^="#"]').forEach(a => {
+    a.addEventListener('click', e => {
+      const id = a.getAttribute('href').slice(1);
+      const el = document.getElementById(id);
+      if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth', block: 'start' }); history.replaceState(null, '', '#' + id); }
+    });
+  });
+</script>
+</body>
+</html>
