@@ -332,6 +332,10 @@ A2UI 走了完全不同的路：**AI 不输出任何代码，只输出一份"界
 
 **这是一本"永远翻不完的视觉百科"**——每一页都是 AI 根据你此刻的兴趣实时生成的。没有人提前画好这些页面，没有人定义好"点击 A 跳转到 B"的链接。模型即时理解你的意图，即时创造回应。
 
+<img width="2274" height="1492" alt="image" src="https://github.com/user-attachments/assets/dd8f6522-96dd-4708-a50c-de0d75f35014" />
+<img width="2258" height="1492" alt="image" src="https://github.com/user-attachments/assets/ad659e90-bdf6-435f-bb45-81a103856391" />
+
+
 ### 它解决了什么
 
 像素流的根本突破是**砍掉了代码中介层**。
